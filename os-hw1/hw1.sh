@@ -13,6 +13,7 @@ cells[8]=' '
 cells[9]=' '
 
 gameOver=false
+gameDraw=false
 
 function drawDesk {
 	clear
@@ -92,12 +93,24 @@ function checkGameOver {
 		return
 	fi
 
+	for i in {1..9}
+	do
+		if [ "${cells[$i]}" == " " ]; then
+			return
+		fi
+	done
+
+	gameDraw=true
 	return
 }
 
 function quit {
-	rm $pipe1
-	rm $pipe2
+	if [ -p $pipe1 ]; then
+		rm $pipe1
+	fi
+	if [ -p $pipe2 ]; then
+		rm $pipe2
+	fi
 }
 
 # Draw game field
@@ -105,6 +118,11 @@ drawDesk
 
 pipe1=/tmp/pipe1
 pipe2=/tmp/pipe2
+
+if [[ -p $pipe1 ]] && [[ -p $pipe2 ]]; then
+	rm $pipe1
+	rm $pipe2
+fi
 
 if [[ ! -p $pipe1 ]]; then
 	mkfifo $pipe1
@@ -114,7 +132,6 @@ if [[ ! -p $pipe1 ]]; then
 	signHis='o'
 	myStep=true
 else
-	echo 'here2'
 	if [[ ! -p $pipe2 ]]; then
 		mkfifo $pipe2
 	else
@@ -136,7 +153,27 @@ do
 
 	checkGameOver
 
+	if [ $gameDraw == true ]; then
+		if [ $myStep == true ]; then
+			tput cup 8 0
+			echo 'Draw!!!'
+		else
+
+			tput cup 8 0
+			echo 'Draw!!!'
+		fi
+		quit
+	fi
+
 	if [ $gameOver == true ]; then
+		if [ $myStep == true ]; then
+			tput cup 8 0
+			echo 'You Lost'
+		else
+
+			tput cup 8 0
+			echo 'You Won'
+		fi
 		quit
 	fi
 
