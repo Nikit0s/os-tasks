@@ -1,4 +1,4 @@
-# os-hw3
+# os-hw4
 
 * For compile type:
 `gcc -pthread -o <output-filename> <server.c/client.c>`
