@@ -12,7 +12,7 @@
 #define LINE_SIZE 200
 #define ARG_LENGTH 100
 #define MAX_PROCS 100
-#define SLEEP_TIME_SECS 5
+#define SLEEP_TIME_SECS 3600
 
 int gargc;
 char ** gargv;
@@ -43,7 +43,7 @@ void setMode(int argc, int mode) {
 int parseConfig(char *cfg) {
   FILE *fd;
   if ((fd = fopen(cfg, "r")) == NULL) {
-    printf("ERROR: Can't open config\n");
+    syslog(LOG_WARNING, "ERROR: Can't open config\n");
     return 1;
   }
 
@@ -99,7 +99,7 @@ int saveToFile(pid_t pid, int i) {
 
   FILE *fd;
   if ((fd = fopen(filePath, "w")) == NULL) {
-    printf("ERROR: Can't open file %s\n", filePath);
+    syslog(LOG_WARNING, "ERROR: Can't open file %s\n", filePath);
     return 1;
   }
   fwrite(&pid, sizeof(pid_t), 1, fd);
@@ -115,7 +115,6 @@ int makeFork(int i, bool is_sleep) {
   switch (pids[i] = fork()) {
     // ERROR handler
     case -1:
-      // error("Fork failed");
       exit(1);
       break;
 
@@ -125,7 +124,6 @@ int makeFork(int i, bool is_sleep) {
       }
 
       if (execvp(programs[i].name, programs[i].arguments) < 0) {
-        // error("Cant execute");
         exit(1);
       }
 
@@ -188,18 +186,12 @@ int handleProcesses() {
           programs[i].tries++;
         }
         if (programs[i].tries > 50) {
-          printf("%s program execution failed more than 50 times. Taking pause for %d seconds\n", programs[i].name, SLEEP_TIME_SECS);
+          syslog(LOG_NOTICE, "%s program execution failed more than 50 times. Taking pause for %d seconds\n", programs[i].name, SLEEP_TIME_SECS);
           makeFork(i, true);
           programs[i].tries = 0;
         } else {
           makeFork(i, false);
         }
-
-        // int err = makeFork(i);
-        // if (err) {
-        //   printf("ERROR: Can't fork!\n");
-        //   return 1;
-        // }
       }
     }
   }
@@ -225,7 +217,7 @@ int run(int argc, char * argv []) {
 
 
   if (argc < 2) {
-    printf("ERROR: Wrong arguments\n");
+    syslog(LOG_WARNING, "ERROR: Wrong arguments\n");
     return 1;
   }
 
@@ -239,7 +231,7 @@ int run(int argc, char * argv []) {
   for (i = 0; i < programsCount; i++) {
     err = makeFork(i, false);
     if (err) {
-      printf("ERROR: Can't fork!\n");
+      syslog(LOG_WARNING, "ERROR: Can't fork!\n");
       return 1;
     }
   }
@@ -248,7 +240,7 @@ int run(int argc, char * argv []) {
 
   err = handleProcesses();
   if (err) {
-    printf("ERROR: Unexpected error with handle processes\n");
+    syslog(LOG_WARNING, "ERROR: Unexpected error with handle processes\n");
     return 2;
   }
 
@@ -257,11 +249,42 @@ int run(int argc, char * argv []) {
 
 int main(int argc, char *argv[]) {
 
+  int pid;
+
   gargc = argc;
   gargv = argv;
 
-  run(argc, argv);
+  pid = fork();
+
+  if (pid == -1) {
+    syslog(LOG_WARNING, "ERROR: Start Daemon failed\n");
+    return -1;
+  }
+
+  else if (!pid) // если это потомок
+  {
+    // данный код уже выполняется в процессе потомка
+    // разрешаем выставлять все биты прав на создаваемые файлы,
+    // иначе у нас могут быть проблемы с правами доступа
+    umask(0);
+
+    // создаём новый сеанс, чтобы не зависеть от родителя
+    setsid();
+    // переходим в корень диска, если мы этого не сделаем, то могут быть проблемы.
+    // к примеру с размантированием дисков
+    chdir("/");
+    // закрываем дискрипторы ввода/вывода/ошибок, так как нам они больше не понадобятся
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
 
 
-  return 0;
+    run(argc, argv);
+    return 0;
+  } else {
+    return 0;
+  }
+
+  // run(argc, argv);
+  // return 0;
 }
